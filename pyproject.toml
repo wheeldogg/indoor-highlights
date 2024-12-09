@@ -1,0 +1,16 @@
+[tool.poetry]
+name = "indoor-highlights"
+version = "0.1.0"
+description = ""
+authors = ["Shane Whelan <shanewhelan89@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+pandas = "^2.2.3"
+moviepy = "^2.1.1"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
