@@ -14,7 +14,7 @@ import ipdb
 
 from dotenv import load_dotenv
 import pandas as pd
-from moviepy import VideoFileClip, concatenate_videoclips
+from moviepy.editor import VideoFileClip, concatenate_videoclips
 
 # Load environment variables from .env file
 load_dotenv()
@@ -66,14 +66,17 @@ def main(video_files, csv_file, directory, date):
     # ipdb.set_trace()
     # Step 3: Create and concatenate subclips based on cumulative times
     final_clips = []
-    cumulative_times = cumulative_times[0:5]
+    # cumulative_times = cumulative_times[0:5]
 
     print(len(cumulative_times))
+    # ipdb.set_trace()
 
+    print(type(full_clip))
     for t in cumulative_times:
-        start = max(t - 30, 0)
-        end = min(t + 30, full_clip.duration)
-        subclip = full_clip.subclipped(start, end)
+        start = max(t - 10, 0)
+        end = min(t + 5, full_clip.duration)
+        print(f"Creating subclip from {start} to {end} based on t={t}")
+        subclip = full_clip.subclip(start, end)
         final_clips.append(subclip)
 
     # Step 4: Concatenate all the subclips into a final video
