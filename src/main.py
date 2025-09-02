@@ -1,28 +1,23 @@
 """
-Examples:
-poetry run python src/main.py --videos "video1.mp4,video2.mp4,video3.mp4" --csv "data.csv"
+Indoor highlights video processor.
 
-args:
---directory "/path/to/different/folder"
+Examples:
+poetry run python src/main.py --videos "video1.mp4,video2.mp4,video3.mp4" --csv "data.csv" --date 2025-07-28
+poetry run python src/main.py --videos "MAH02309.mp4,MAH02310.mp4,MAH02311.mp4" --csv "/Users/swhelan/Dropbox/Indoor football/2025-07-28/splits.csv" --date 2025-07-28 --auto-move
 """
 
 import argparse
 import os
 import sys
-import ipdb
+import shutil
+from pathlib import Path
 
-
-from dotenv import load_dotenv
 import pandas as pd
 from moviepy.editor import VideoFileClip, concatenate_videoclips
 
-# Load environment variables from .env file
-load_dotenv()
-
-# Determine default directory for files
-DEFAULT_DIR = os.getenv("FILE_DIR", os.path.dirname(os.path.abspath(__file__)))
-
-import pdb
+# Import our config system
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from config import Config
 
 
 def parse_time_to_seconds(t):
@@ -40,71 +35,89 @@ def parse_time_to_seconds(t):
         return float(parts[0])  # Handle case where the input is already in seconds
 
 
-def main(video_files, csv_file, directory, date):
-    print(DEFAULT_DIR)
+def main(video_files, csv_file, date, auto_move=False, config=None):
+    """Main processing function."""
+    if config is None:
+        config = Config.from_env()
+    
+    print(f"Processing videos for date: {date}")
+    
     # Build full paths to the CSV and video files
-    base_directory = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    csv_directory = os.path.join(base_directory, "data")
-    csv_path = os.path.join(csv_directory, csv_file)
+    csv_path = config.get_csv_path(csv_file)
     video_paths = [
-        os.path.join(directory, date, v.strip()) for v in video_files.split(",")
+        config.get_video_path(date, v.strip()) for v in video_files.split(",")
     ]
+    
+    print(f"CSV file: {csv_path}")
+    print(f"Video files: {video_paths}")
 
     # Step 1: Read CSV
     df = pd.read_csv(csv_path)
     cumulative_times = df["Cumulative Time"].apply(parse_time_to_seconds).tolist()
 
     # Step 2: Load and concatenate video files
-
     clips = [VideoFileClip(v) for v in video_paths]
-    # import pdb
-
-    # pdb.set_trace()
-
     full_clip = concatenate_videoclips(clips)
 
-    # ipdb.set_trace()
     # Step 3: Create and concatenate subclips based on cumulative times
     final_clips = []
-    # cumulative_times = cumulative_times[0:5]
+    print(f"Found {len(cumulative_times)} timestamps")
+    print(f"Full clip duration: {full_clip.duration} seconds")
 
-    print(len(cumulative_times))
-    # ipdb.set_trace()
-
-    print(type(full_clip))
     for t in cumulative_times:
-        start = max(t - 10, 0)
-        end = min(t + 5, full_clip.duration)
+        # Skip timestamps that exceed video duration
+        if t > full_clip.duration:
+            print(
+                f"Skipping timestamp {t} as it exceeds video duration ({full_clip.duration})"
+            )
+            continue
+
+        start = max(t - config.before_goal_seconds, 0)
+        end = min(t + config.after_goal_seconds, full_clip.duration)
         print(f"Creating subclip from {start} to {end} based on t={t}")
         subclip = full_clip.subclip(start, end)
         final_clips.append(subclip)
 
     # Step 4: Concatenate all the subclips into a final video
     if final_clips:
+        output_file = config.output_filename
         final_video = concatenate_videoclips(final_clips)
         final_video.write_videofile(
-            "final_video.mp4", codec="libx264", audio_codec="aac"
+            output_file, codec=config.video_codec, audio_codec=config.audio_codec
         )
+        
+        # Step 5: Auto-move the output file if requested
+        if auto_move:
+            destination = config.get_output_path(date)
+            destination_dir = os.path.dirname(destination)
+            
+            # Create destination directory if it doesn't exist
+            Path(destination_dir).mkdir(parents=True, exist_ok=True)
+            
+            print(f"Moving {output_file} to {destination}")
+            shutil.move(output_file, destination)
+            print(f"Video saved to: {destination}")
+        else:
+            print(f"Video saved as: {output_file}")
+            print(f"To move to destination, run: mv {output_file} \"{config.get_output_path(date)}\"")
     else:
         print("No clips to produce from the given timestamps.")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Process videos and timestamps from a CSV."
+        description="Process videos and timestamps from a CSV to create highlight reel."
     )
     parser.add_argument(
         "--videos", type=str, required=True, help="Comma-separated video file names"
     )
-    parser.add_argument("--csv", type=str, required=True, help="CSV file name")
-    parser.add_argument(
-        "--directory",
-        type=str,
-        default=DEFAULT_DIR,
-        help="Directory where the CSV and videos are located",
-    )
+    parser.add_argument("--csv", type=str, required=True, help="CSV file path")
     parser.add_argument(
         "--date", type=str, required=True, help="Date in YYYY-MM-DD format"
     )
+    parser.add_argument(
+        "--auto-move", action="store_true", 
+        help="Automatically move output file to the date directory"
+    )
     args = parser.parse_args()
-    main(args.videos, args.csv, args.directory, args.date)
+    main(args.videos, args.csv, args.date, args.auto_move)

@@ -2,3 +2,4 @@ data/*
 final_video.mp4
 .env
 .DS_Store
+examples.md
