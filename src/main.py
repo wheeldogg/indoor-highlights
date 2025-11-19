@@ -12,16 +12,20 @@ import os
 import sys
 import ipdb
 
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from dotenv import load_dotenv
 import pandas as pd
 from moviepy.editor import VideoFileClip, concatenate_videoclips
+from config import Config
 
 # Load environment variables from .env file
 load_dotenv()
 
-before_goal_seconds = 8
-after_goal_seconds = 4
+# Get configuration
+config = Config.from_env()
+before_goal_seconds = config.before_goal_seconds
+after_goal_seconds = config.after_goal_seconds
 
 # Determine default directory for files
 DEFAULT_DIR = os.getenv("FILE_DIR", os.path.dirname(os.path.abspath(__file__)))
@@ -44,16 +48,23 @@ def parse_time_to_seconds(t):
         return float(parts[0])  # Handle case where the input is already in seconds
 
 
-def main(video_files, directory, date):
+def main(video_files, directory, date, save_full_video=None):
     print(DEFAULT_DIR)
+
+    # Override config if save_full_video is explicitly set
+    if save_full_video is not None:
+        config.save_full_video = save_full_video
     # Build full paths to the CSV and video files
     base_directory = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     date_folder = os.path.join(directory, date)
 
     # If video_files is None, auto-discover all MP4 files in the date folder
     if video_files is None:
+        # Exclude output files from auto-discovery
+        exclude_files = {config.output_filename.lower(), config.full_video_filename.lower()}
         mp4_files = sorted(
-            [f for f in os.listdir(date_folder) if f.lower().endswith(".mp4")]
+            [f for f in os.listdir(date_folder)
+             if f.lower().endswith(".mp4") and f.lower() not in exclude_files]
         )
         if not mp4_files:
             print(f"No MP4 files found in {date_folder}")
@@ -81,6 +92,24 @@ def main(video_files, directory, date):
 
     full_clip = concatenate_videoclips(clips)
 
+    # Save the full uncut video if enabled
+    if config.save_full_video:
+        full_video_path = config.get_full_video_path(date)
+        print(f"Saving full uncut video to: {full_video_path}")
+        print(f"This may take several minutes for large videos...")
+        try:
+            full_clip.write_videofile(
+                full_video_path,
+                codec=config.video_codec,
+                audio_codec=config.audio_codec,
+                threads=4,  # Use multiple threads for faster encoding
+                preset='faster'  # Use faster encoding preset
+            )
+            print(f"Full uncut video saved to: {full_video_path}")
+        except Exception as e:
+            print(f"Error saving full video: {e}")
+            print("Continuing with highlight creation...")
+
     # ipdb.set_trace()
     # Step 3: Create and concatenate subclips based on cumulative times
     final_clips = []
@@ -104,11 +133,39 @@ def main(video_files, directory, date):
     # Step 4: Concatenate all the subclips into a final video
     if final_clips:
         final_video = concatenate_videoclips(final_clips)
-        output_path = os.path.join(date_folder, "final_video.mp4")
-        final_video.write_videofile(output_path, codec="libx264", audio_codec="aac")
-        print(f"Final video saved to: {output_path}")
+        output_path = config.get_output_path(date)
+
+        try:
+            final_video.write_videofile(
+                output_path,
+                codec=config.video_codec,
+                audio_codec=config.audio_codec,
+                threads=4,
+                preset='faster',
+                logger='bar'  # Force progress bar output
+            )
+
+            # Verify the file was actually created and has content
+            if os.path.exists(output_path):
+                file_size = os.path.getsize(output_path)
+                print(f"Highlights video saved to: {output_path}")
+                print(f"File size: {file_size / (1024*1024):.2f} MB")
+            else:
+                print(f"ERROR: File was not created at {output_path}")
+                sys.exit(1)
+        except Exception as e:
+            print(f"Error saving highlights video: {e}")
+            raise
+        finally:
+            # Clean up
+            final_video.close()
     else:
         print("No clips to produce from the given timestamps.")
+
+    # Clean up video clips to free memory
+    full_clip.close()
+    for clip in clips:
+        clip.close()
 
 
 if __name__ == "__main__":
@@ -131,5 +188,19 @@ if __name__ == "__main__":
     parser.add_argument(
         "--date", type=str, required=True, help="Date in YYYY-MM-DD format"
     )
+    parser.add_argument(
+        "--save-full-video",
+        dest="save_full_video",
+        action="store_true",
+        default=None,
+        help="Save the full uncut video alongside highlights"
+    )
+    parser.add_argument(
+        "--no-save-full-video",
+        dest="save_full_video",
+        action="store_false",
+        default=None,
+        help="Don't save the full uncut video"
+    )
     args = parser.parse_args()
-    main(args.videos, args.directory, args.date)
+    main(args.videos, args.directory, args.date, args.save_full_video)

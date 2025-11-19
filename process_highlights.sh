@@ -7,22 +7,24 @@ set -e  # Exit on any error
 
 # Default values
 VIDEOS=""
-CSV=""
 DATE=""
 AUTO_MOVE=false
+SAVE_FULL_VIDEO=""
 
 # Function to show usage
 show_usage() {
-    echo "Usage: $0 --videos \"video1.mp4,video2.mp4\" --csv \"path/to/splits.csv\" --date YYYY-MM-DD [--auto-move]"
+    echo "Usage: $0 --videos \"video1.mp4,video2.mp4\" --date YYYY-MM-DD [OPTIONS]"
     echo ""
     echo "Options:"
-    echo "  --videos     Comma-separated list of video files"
-    echo "  --csv        Path to CSV file with timestamps"
-    echo "  --date       Date in YYYY-MM-DD format"
-    echo "  --auto-move  Automatically move output to date directory"
+    echo "  --videos              Comma-separated list of video files (optional, auto-discovers if not provided)"
+    echo "  --date                Date in YYYY-MM-DD format"
+    echo "  --auto-move           Automatically move output to date directory"
+    echo "  --save-full-video     Save the full uncut video alongside highlights"
+    echo "  --no-save-full-video  Don't save the full uncut video"
     echo ""
     echo "Examples:"
-    echo "  $0 --videos \"MAH02309.mp4,MAH02310.mp4,MAH02311.mp4\" --csv \"/Users/swhelan/Dropbox/Indoor football/2025-07-28/splits.csv\" --date 2025-07-28 --auto-move"
+    echo "  $0 --videos \"MAH02309.mp4,MAH02310.mp4,MAH02311.mp4\" --date 2025-07-28 --save-full-video"
+    echo "  $0 --date 2025-07-28  # Auto-discovers all MP4 files in date folder"
     echo ""
     echo "Environment variables can be set in .env file:"
     echo "  BASE_DIRECTORY=/Users/swhelan/Dropbox/Indoor football"
@@ -37,16 +39,20 @@ while [[ $# -gt 0 ]]; do
             VIDEOS="$2"
             shift 2
             ;;
-        --csv)
-            CSV="$2"
-            shift 2
-            ;;
         --date)
             DATE="$2"
             shift 2
             ;;
         --auto-move)
             AUTO_MOVE=true
+            shift
+            ;;
+        --save-full-video)
+            SAVE_FULL_VIDEO="true"
+            shift
+            ;;
+        --no-save-full-video)
+            SAVE_FULL_VIDEO="false"
             shift
             ;;
         -h|--help)
@@ -62,17 +68,27 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Validate required arguments
-if [[ -z "$VIDEOS" || -z "$CSV" || -z "$DATE" ]]; then
-    echo "Error: Missing required arguments"
+if [[ -z "$DATE" ]]; then
+    echo "Error: Missing required argument: --date"
     show_usage
     exit 1
 fi
 
 # Build command
-CMD="poetry run python src/main.py --videos \"$VIDEOS\" --csv \"$CSV\" --date $DATE"
+if [[ -n "$VIDEOS" ]]; then
+    CMD="poetry run python src/main.py --videos \"$VIDEOS\" --date $DATE"
+else
+    CMD="poetry run python src/main.py --date $DATE"
+fi
 
 if [[ "$AUTO_MOVE" == true ]]; then
     CMD="$CMD --auto-move"
+fi
+
+if [[ "$SAVE_FULL_VIDEO" == "true" ]]; then
+    CMD="$CMD --save-full-video"
+elif [[ "$SAVE_FULL_VIDEO" == "false" ]]; then
+    CMD="$CMD --no-save-full-video"
 fi
 
 echo "Running: $CMD"
