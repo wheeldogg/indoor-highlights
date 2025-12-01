@@ -48,7 +48,7 @@ def parse_time_to_seconds(t):
         return float(parts[0])  # Handle case where the input is already in seconds
 
 
-def main(video_files, directory, date, save_full_video=None):
+def main(video_files, directory, date, save_full_video=None, skip_highlights=False):
     print(DEFAULT_DIR)
 
     # Override config if save_full_video is explicitly set
@@ -76,15 +76,15 @@ def main(video_files, directory, date, save_full_video=None):
             os.path.join(date_folder, v.strip()) for v in video_files.split(",")
         ]
 
-    # CSV is always splits.csv in the date folder
-    csv_path = os.path.join(date_folder, "splits.csv")
-
-    # Step 1: Read CSV
-    df = pd.read_csv(csv_path)
-    cumulative_times = df["Cumulative Time"].apply(parse_time_to_seconds).tolist()
+    # Step 1: Read CSV (skip if only creating full video)
+    if not skip_highlights:
+        csv_path = os.path.join(date_folder, "splits.csv")
+        df = pd.read_csv(csv_path)
+        cumulative_times = df["Cumulative Time"].apply(parse_time_to_seconds).tolist()
+    else:
+        cumulative_times = []
 
     # Step 2: Load and concatenate video files
-
     clips = [VideoFileClip(v) for v in video_paths]
     # import pdb
 
@@ -111,27 +111,28 @@ def main(video_files, directory, date, save_full_video=None):
             print("Continuing with highlight creation...")
 
     # ipdb.set_trace()
-    # Step 3: Create and concatenate subclips based on cumulative times
-    final_clips = []
-    print(len(cumulative_times))
-    print(f"Full clip duration: {full_clip.duration} seconds")
+    # Step 3: Create and concatenate subclips based on cumulative times (skip if --skip-highlights)
+    if not skip_highlights:
+        final_clips = []
+        print(len(cumulative_times))
+        print(f"Full clip duration: {full_clip.duration} seconds")
 
-    for t in cumulative_times:
-        # Skip timestamps that exceed video duration
-        if t > full_clip.duration:
-            print(
-                f"Skipping timestamp {t} as it exceeds video duration ({full_clip.duration})"
-            )
-            continue
+        for t in cumulative_times:
+            # Skip timestamps that exceed video duration
+            if t > full_clip.duration:
+                print(
+                    f"Skipping timestamp {t} as it exceeds video duration ({full_clip.duration})"
+                )
+                continue
 
-        start = max(t - before_goal_seconds, 0)
-        end = min(t + after_goal_seconds, full_clip.duration)
-        print(f"Creating subclip from {start} to {end} based on t={t}")
-        subclip = full_clip.subclip(start, end)
-        final_clips.append(subclip)
+            start = max(t - before_goal_seconds, 0)
+            end = min(t + after_goal_seconds, full_clip.duration)
+            print(f"Creating subclip from {start} to {end} based on t={t}")
+            subclip = full_clip.subclip(start, end)
+            final_clips.append(subclip)
 
     # Step 4: Concatenate all the subclips into a final video
-    if final_clips:
+    if not skip_highlights and final_clips:
         final_video = concatenate_videoclips(final_clips)
         output_path = config.get_output_path(date)
 
@@ -159,8 +160,11 @@ def main(video_files, directory, date, save_full_video=None):
         finally:
             # Clean up
             final_video.close()
-    else:
+    elif not skip_highlights:
         print("No clips to produce from the given timestamps.")
+
+    if skip_highlights:
+        print("Skipped highlights creation (--skip-highlights flag was set)")
 
     # Clean up video clips to free memory
     full_clip.close()
@@ -202,5 +206,12 @@ if __name__ == "__main__":
         default=None,
         help="Don't save the full uncut video"
     )
+    parser.add_argument(
+        "--skip-highlights",
+        dest="skip_highlights",
+        action="store_true",
+        default=False,
+        help="Skip highlights creation and only produce the full video"
+    )
     args = parser.parse_args()
-    main(args.videos, args.directory, args.date, args.save_full_video)
+    main(args.videos, args.directory, args.date, args.save_full_video, args.skip_highlights)

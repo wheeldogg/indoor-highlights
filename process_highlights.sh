@@ -10,6 +10,7 @@ VIDEOS=""
 DATE=""
 AUTO_MOVE=false
 SAVE_FULL_VIDEO=""
+SKIP_HIGHLIGHTS=false
 
 # Function to show usage
 show_usage() {
@@ -21,6 +22,7 @@ show_usage() {
     echo "  --auto-move           Automatically move output to date directory"
     echo "  --save-full-video     Save the full uncut video alongside highlights"
     echo "  --no-save-full-video  Don't save the full uncut video"
+    echo "  --skip-highlights     Skip highlights creation and only produce the full video"
     echo ""
     echo "Examples:"
     echo "  $0 --videos \"MAH02309.mp4,MAH02310.mp4,MAH02311.mp4\" --date 2025-07-28 --save-full-video"
@@ -53,6 +55,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --no-save-full-video)
             SAVE_FULL_VIDEO="false"
+            shift
+            ;;
+        --skip-highlights)
+            SKIP_HIGHLIGHTS=true
             shift
             ;;
         -h|--help)
@@ -89,6 +95,10 @@ if [[ "$SAVE_FULL_VIDEO" == "true" ]]; then
     CMD="$CMD --save-full-video"
 elif [[ "$SAVE_FULL_VIDEO" == "false" ]]; then
     CMD="$CMD --no-save-full-video"
+fi
+
+if [[ "$SKIP_HIGHLIGHTS" == true ]]; then
+    CMD="$CMD --skip-highlights"
 fi
 
 echo "Running: $CMD"

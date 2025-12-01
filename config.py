@@ -11,11 +11,11 @@ load_dotenv()
 @dataclass
 class Config:
     """Configuration for video processing."""
-    
+
     # Timing settings
     before_goal_seconds: int = 8
     after_goal_seconds: int = 4
-    
+
     # File paths
     base_directory: str = "/Users/swhelan/Dropbox/Indoor football"
     csv_directory: str = "data"
@@ -26,6 +26,10 @@ class Config:
     video_codec: str = "libx264"
     audio_codec: str = "aac"
     save_full_video: bool = True  # Whether to save the full uncut video
+
+    # YouTube settings
+    youtube_default_privacy: str = "unlisted"
+    youtube_default_tags: str = "indoor football,highlights,goals"
     
     @classmethod
     def from_env(cls) -> 'Config':
@@ -40,6 +44,8 @@ class Config:
             video_codec=os.getenv("VIDEO_CODEC", "libx264"),
             audio_codec=os.getenv("AUDIO_CODEC", "aac"),
             save_full_video=os.getenv("SAVE_FULL_VIDEO", "true").lower() == "true",
+            youtube_default_privacy=os.getenv("YOUTUBE_DEFAULT_PRIVACY", "unlisted"),
+            youtube_default_tags=os.getenv("YOUTUBE_DEFAULT_TAGS", "indoor football,highlights,goals"),
         )
     
     def get_video_path(self, date: str, video_file: str) -> str:
